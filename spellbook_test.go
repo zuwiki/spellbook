@@ -128,3 +128,19 @@ func TestRegisteringDbComponent(t *testing.T) {
 		t.Error("Expected xyz! for component name", cns[0])
 	}
 }
+
+func TestRegisteringMissingDbComponent(t *testing.T) {
+	db := getEmptyDB()
+
+	m, _ := NewManager(db)
+
+	err := m.RegisterComponent("xyz!", "notXyz!", Xyz{})
+	if err == nil {
+		t.Error("Registered a component with a missing table!")
+	}
+
+	cns := m.GetComponentNames()
+	if len(cns) != 0 {
+		t.Error("Component with missing table shows up in GetComponentNames!")
+	}
+}

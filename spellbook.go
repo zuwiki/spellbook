@@ -37,6 +37,9 @@ type Component struct {
 }
 
 func (m *Manager) RegisterComponent(name string, table string, obj interface{}) error {
+	if _, err := m.db.Exec("select 1 from " + table + " where 1 = 0"); err != nil {
+		return err
+	}
 	m.componentTypes[name] = componentType{ table: table, typ: reflect.TypeOf(obj) }
 	return nil
 }
