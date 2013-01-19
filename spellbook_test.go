@@ -14,7 +14,7 @@ func getEmptyDB() *sql.DB {
 	db, err := sql.Open("sqlite3", dbName)
 	sqls := []string{
 		"create table entities (id integer not null primary key)",
-		"create table xyz (id integer not null primary key, x integer not null, y integer not null, z integer not null)",
+		"create table xyz (entity_id integer not null primary key, X integer not null, Y integer not null, Z integer not null)",
 	}
 	for _, sql := range sqls {
 		_, err = db.Exec(sql)
@@ -107,9 +107,9 @@ func TestDifferentEntityIds(t *testing.T) {
 }
 
 type Xyz struct {
-	x int
-	y int
-	z int
+	X int
+	Y int
+	Z int
 }
 
 func TestRegisteringDbComponent(t *testing.T) {
@@ -159,4 +159,46 @@ func TestRegisteringComponentWithDuplicateName(t *testing.T) {
 		t.Fatal("Registered local component with duplicate name")
 	}
 }
+
+func TestAddingUnregisteredComponent(t *testing.T) {
+	m := getEmptyManager()
+
+	e, _ := m.NewEntity()
+	c, err := e.NewComponent("foo")
+	if c != nil || err == nil {
+		t.Error("Created component of nonexistent type")
+	}
+}
+
+func TestCreatingAndSavingComponent(t *testing.T) {
+	m := getEmptyManager()
+
+	m.RegisterComponent("xyz!", "xyz", Xyz{})
+
+	e, _ := m.NewEntity()
+
+	c, err := e.NewComponent("xyz!")
+	if c == nil || err != nil {
+		t.Fatal("Failed to create component:", err)
+	}
+	xyz := c.data.(*Xyz)
+	xyz.X = 1
+	xyz.Y = 2
+	xyz.Z = -1
+
+	err = c.Save()
+	if err != nil {
+		t.Error(err)
+	}
+
+	c, err = e.GetComponent("xyz!")
+	if c == nil || err != nil {
+		t.Fatal("Failed to get component:", err)
+	}
+	xyz = c.data.(*Xyz)
+	if xyz.X != 1 || xyz.Y != 2 || xyz.Z != -1 {
+		t.Error("Retrieved wrong data", xyz)
+	}
+}
+
 
