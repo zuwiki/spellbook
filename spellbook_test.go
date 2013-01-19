@@ -12,9 +12,10 @@ const dbName = "./test.sqlite3"
 func getEmptyDB() *sql.DB {
 	os.Remove(dbName)
 	db, err := sql.Open("sqlite3", dbName)
+	// todo: further investigate cascading deletes
 	sqls := []string{
 		"create table entities (id integer not null primary key)",
-		"create table xyz (entity_id integer not null primary key, X integer not null, Y integer not null, Z integer not null)",
+		"create table xyz (entity_id integer not null primary key references entities(id) on delete cascade, X integer not null, Y integer not null, Z integer not null)",
 	}
 	for _, sql := range sqls {
 		_, err = db.Exec(sql)
@@ -253,5 +254,35 @@ func TestRemovingComponent(t *testing.T) {
 	if err != nil {
 		t.Error("Failed to remove a registered, existent component")
 	}
+}
+
+func TestDeletingEntity(t *testing.T) {
+	m := getEmptyManager()
+
+	m.RegisterComponent("xyz!", "xyz", Xyz{})
+
+	e, _ := m.NewEntity()
+	err := e.Delete()
+	if err != nil {
+		t.Error("Failed to delete empty entity")
+	}
+
+	e, _ = m.NewEntity()
+
+	c, _ := e.NewComponent("xyz!")
+	c.Save()
+
+	err = e.Delete()
+
+	es, err := m.GetEntities()
+	if err != nil {
+		t.Error(err)
+	}
+	if es.Next() {
+		t.Error("Failed to actually delete empty entity")
+	}
+	es.Close()
+
+	// todo: test Components list to make sure component was deleted
 }
 

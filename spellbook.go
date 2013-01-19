@@ -82,7 +82,13 @@ func (m *Manager) NewEntity() (*Entity, error) {
 	return &Entity{id: id, manager: m}, nil
 }
 
-//func (m *Manager) DeleteEntity(e *Entity) error {}
+func (e *Entity) Delete() error {
+	_, err := e.manager.db.Exec("delete from entities where id = ?", e.id)
+	if err != nil {
+		return err
+	}
+	return err
+}
 
 type Entities struct {
 	*sql.Rows
