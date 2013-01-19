@@ -17,7 +17,7 @@ var (
 type componentType struct {
 	table string
 	typ reflect.Type
-	local bool
+	local map[int64]interface{}
 }
 
 type Manager struct {
@@ -62,7 +62,8 @@ func (m *Manager) RegisterLocalComponent(name string, obj interface{}) error {
 	if _, ok := m.componentTypes[name]; ok {
 		return ErrComponentAlreadyRegistered
 	}
-	m.componentTypes[name] = componentType{ typ: reflect.TypeOf(obj), local: true }
+	l := make(map[int64]interface{})
+	m.componentTypes[name] = componentType{ typ: reflect.TypeOf(obj), local: l }
 	return nil
 }
 func (m *Manager) GetComponentNames() []string {
@@ -128,19 +129,37 @@ func (e *Entity) Components() ([]*Component, error) {
 	return cs, nil
 }
 
+// Should only be called by Entity.NewComponent
+func (e *Entity) newDbComponent(name string, ctype componentType) (*Component, error) {
+	r := e.manager.db.QueryRow("select entity_id from " + ctype.table + " where entity_id = ?", e.id)
+	var id int64
+	err := r.Scan(&id)
+	if err != sql.ErrNoRows {
+		return nil, fmt.Errorf("Couldn't create component", name, err)
+	}
+	c := Component{ entity: e.id, name: name, isNew: true, manager: e.manager, data: reflect.New(ctype.typ).Interface() }
+	return &c, nil
+}
+
+// Should only be called by Entity.NewComponent
+func (e *Entity) newLocalComponent(name string, ctype componentType) (*Component, error) {
+	_, ok := ctype.local[e.id]
+	if ok {
+		return nil, errors.New("Duplicate component")
+	}
+	c := Component{ entity: e.id, name: name, isNew: true, manager: e.manager, data: reflect.New(ctype.typ).Interface() }
+	return &c, nil
+}
+
 func (e *Entity) NewComponent(name string) (*Component, error) {
 	ctype, ok := e.manager.componentTypes[name]
 	if !ok {
 		return nil, ErrComponentNotRegistered
 	}
-	r := e.manager.db.QueryRow("select entity_id from " + ctype.table + " where entity_id = ?", e.id)
-	var id int64
-	err := r.Scan(&id)
-	if err != sql.ErrNoRows {
-		return nil, fmt.Errorf("Entity already has %s component: %v", name, err)
+	if ctype.local != nil {
+		return e.newLocalComponent(name, ctype)
 	}
-	c := Component{ entity: e.id, name: name, isNew: true, manager: e.manager, data: reflect.New(ctype.typ).Interface() }
-	return &c, nil
+	return e.newDbComponent(name, ctype)
 }
 
 func bindComponent(name string, rs *sql.Rows, ctype componentType, manager *Manager) (*Component, error) {
@@ -179,11 +198,17 @@ func bindComponent(name string, rs *sql.Rows, ctype componentType, manager *Mana
 	return &Component{ entity: id, name: name, isNew: false, manager: manager, data: cv.Addr().Interface() }, nil
 }
 
-func (e *Entity) GetComponent(name string) (*Component, error) {
-	ctype, ok := e.manager.componentTypes[name]
+// Should only be called by GetComponent
+func (e *Entity) getLocalComponent(name string, ctype componentType) (*Component, error) {
+	data, ok := ctype.local[e.id]
 	if !ok {
-		return nil, ErrComponentNotRegistered
+		return nil, ErrNoComponent
 	}
+	return &Component{ entity: e.id, name: name, isNew: false, manager: e.manager, data: data }, nil
+}
+
+// Should only be called by GetComponent
+func (e *Entity) getDbComponent(name string, ctype componentType) (*Component, error) {
 	rs, err := e.manager.db.Query("select * from " + ctype.table + " where entity_id = ?", e.id)
 	defer rs.Close()
 	if err != nil {
@@ -193,6 +218,17 @@ func (e *Entity) GetComponent(name string) (*Component, error) {
 		return nil, ErrNoComponent
 	}
 	return bindComponent(name, rs, ctype, e.manager)
+}
+
+func (e *Entity) GetComponent(name string) (*Component, error) {
+	ctype, ok := e.manager.componentTypes[name]
+	if !ok {
+		return nil, ErrComponentNotRegistered
+	}
+	if ctype.local != nil {
+		return e.getLocalComponent(name, ctype)
+	}
+	return e.getDbComponent(name, ctype)
 }
 
 func (e *Entity) RemoveComponent(name string) error {
@@ -214,12 +250,13 @@ func (e *Entity) RemoveComponent(name string) error {
 	return nil
 }
 
-func (c *Component) Save() error {
-	ctype := c.manager.componentTypes[c.name]
-	cv := reflect.ValueOf(c.data).Elem()
-	if (ctype.typ != cv.Type()) {
-		return fmt.Errorf("Incompatible types: expected %s, got %s", ctype.typ, cv.Type())
-	}
+func (c *Component) localSave(ctype componentType, cv reflect.Value) error {
+	ctype.local[c.entity] = c.data
+	c.isNew = false
+	return nil
+}
+
+func (c *Component) dbSave(ctype componentType, cv reflect.Value) error {
 	var query string
 	if c.isNew {
 		columnNames := make([]string, ctype.typ.NumField() + 1)
@@ -251,6 +288,18 @@ func (c *Component) Save() error {
 	}
 	c.isNew = false
 	return nil
+}
+
+func (c *Component) Save() error {
+	ctype := c.manager.componentTypes[c.name]
+	cv := reflect.ValueOf(c.data).Elem()
+	if (ctype.typ != cv.Type()) {
+		return fmt.Errorf("Incompatible types: expected %s, got %s", ctype.typ, cv.Type())
+	}
+	if ctype.local != nil {
+		return c.localSave(ctype, cv)
+	}
+	return c.dbSave(ctype, cv)
 }
 
 type Components struct {

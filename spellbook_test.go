@@ -483,3 +483,57 @@ func TestQueryWhere(t *testing.T) {
 	}
 }
 
+type So struct {
+	What string
+	Haha int
+}
+
+func TestLocalComponent(t *testing.T) {
+	m := getEmptyManager()
+	m.RegisterComponent("xyz!", "xyz", Xyz{})
+	err := m.RegisterLocalComponent("So?", So{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e, _ := m.NewEntity()
+	c, err := e.NewComponent("So?")
+	if err != nil {
+		t.Error(err)
+	}
+
+	so := c.data.(*So)
+	so.What = "your mom"
+	so.Haha = -1
+	c.Save()
+
+	c, err = e.NewComponent("So?")
+	if err == nil {
+		t.Fatal("Created duplicate local component:", c)
+	}
+
+	cs, err := e.Components()
+	if err != nil {
+		t.Error(err)
+	}
+	if len(cs) != 1 {
+		t.Error("Got", len(cs), "components instead of 1")
+	}
+	if cs[0].data.(*So).Haha != -1 {
+		t.Error("Got wrong data")
+	}
+
+	c, _ = e.NewComponent("xyz!")
+	c.Save()
+
+	cs, err = e.Components()
+	if err != nil {
+		t.Error(err)
+	}
+	if len(cs) != 2 {
+		t.Error("Got", len(cs), "components instead of 2")
+	}
+}
+
+// todo: implement queries on local components
+
