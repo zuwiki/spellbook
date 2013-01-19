@@ -171,19 +171,25 @@ func (c *Component) Save() error {
 	if (ctype.typ != cv.Type()) {
 		return fmt.Errorf("Incompatible types: expected %s, got %s", ctype.typ, cv.Type())
 	}
-	if !c.isNew {
-		return fmt.Errorf("Given that immutable data is generally considered a best practice, you are not allowed to update components");
+	var query string
+	if c.isNew {
+		columnNames := make([]string, ctype.typ.NumField() + 1)
+		for i := 0; i < len(columnNames) - 1; i++ {
+			columnNames[i] = ctype.typ.Field(i).Name
+		}
+		columnNames[ctype.typ.NumField()] = "entity_id"
+		questionMarks := make([]string, ctype.typ.NumField() + 1)
+		for i := 0; i < len(questionMarks); i++ {
+			questionMarks[i] = "?"
+		}
+		query = "insert into " + ctype.table + " (" + strings.Join(columnNames, ", ") +  ") values (" + strings.Join(questionMarks, ", ") + ")"
+	} else {
+		assignments := make([]string, ctype.typ.NumField())
+		for i := 0; i < len(assignments); i++ {
+			assignments[i] = ctype.typ.Field(i).Name + " = ?"
+		}
+		query = "update " + ctype.table + " set " + strings.Join(assignments, ", ") + " where entity_id = ?"
 	}
-	columnNames := make([]string, ctype.typ.NumField() + 1)
-	for i := 0; i < len(columnNames) - 1; i++ {
-		columnNames[i] = ctype.typ.Field(i).Name
-	}
-	columnNames[ctype.typ.NumField()] = "entity_id"
-	questionMarks := make([]string, ctype.typ.NumField() + 1)
-	for i := 0; i < len(questionMarks); i++ {
-		questionMarks[i] = "?"
-	}
-	query := "insert into " + ctype.table + " (" + strings.Join(columnNames, ", ") +  ") values (" + strings.Join(questionMarks, ", ") + ")"
 	ifaces := make([]interface{}, ctype.typ.NumField() + 1)
 
 	for i := 0; i < len(ifaces) - 1; i++ {

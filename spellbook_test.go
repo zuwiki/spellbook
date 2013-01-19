@@ -201,4 +201,33 @@ func TestCreatingAndSavingComponent(t *testing.T) {
 	}
 }
 
+func TestUpdatingComponent(t *testing.T) {
+	m := getEmptyManager()
 
+	m.RegisterComponent("xyz!", "xyz", Xyz{})
+
+	e, _ := m.NewEntity()
+
+	c, _ := e.NewComponent("xyz!")
+	xyz := c.data.(*Xyz)
+	c.Save()
+
+	c, _ = e.GetComponent("xyz!")
+	xyz = c.data.(*Xyz)
+	xyz.X = 1
+	xyz.Y = 2
+	xyz.Z = 3
+	err := c.Save()
+	if err != nil {
+		t.Fatal("Failed to update component: ", err)
+	}
+
+	c, err = e.GetComponent("xyz!")
+	if c == nil || err != nil {
+		t.Fatal("Failed to get component after update:", err)
+	}
+	xyz = c.data.(*Xyz)
+	if xyz.X != 1 || xyz.Y != 2 || xyz.Z != 3 {
+		t.Error("Retrieved wrong data", xyz)
+	}
+}
