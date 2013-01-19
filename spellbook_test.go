@@ -117,7 +117,7 @@ type Xyz struct {
 func TestRegisteringDbComponent(t *testing.T) {
 	m := getEmptyManager()
 
-	err := m.RegisterComponent("xyz!", "xyz", Xyz{})
+	err := m.RegisterComponent("xyz!", "xyz", Xyz{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestRegisteringDbComponent(t *testing.T) {
 func TestRegisteringMissingDbComponent(t *testing.T) {
 	m := getEmptyManager()
 
-	err := m.RegisterComponent("xyz!", "notXyz!", Xyz{})
+	err := m.RegisterComponent("xyz!", "notXyz!", Xyz{}, nil)
 	if err == nil {
 		t.Error("Registered a component with a missing table!")
 	}
@@ -148,15 +148,15 @@ func TestRegisteringMissingDbComponent(t *testing.T) {
 func TestRegisteringComponentWithDuplicateName(t *testing.T) {
 	m := getEmptyManager()
 
-	err := m.RegisterComponent("xyz!", "xyz", Xyz{})
+	err := m.RegisterComponent("xyz!", "xyz", Xyz{}, nil)
 	if err != nil {
 		t.Error(err)
 	}
-	err = m.RegisterComponent("xyz!", "xyz", Xyz{})
+	err = m.RegisterComponent("xyz!", "xyz", Xyz{}, nil)
 	if err == nil {
 		t.Fatal("Registered DB component with duplicate name")
 	}
-	err = m.RegisterLocalComponent("xyz!", Xyz{})
+	err = m.RegisterLocalComponent("xyz!", Xyz{}, nil)
 	if err == nil {
 		t.Fatal("Registered local component with duplicate name")
 	}
@@ -175,7 +175,7 @@ func TestAddingUnregisteredComponent(t *testing.T) {
 func TestCreatingAndSavingComponent(t *testing.T) {
 	m := getEmptyManager()
 
-	m.RegisterComponent("xyz!", "xyz", Xyz{})
+	m.RegisterComponent("xyz!", "xyz", Xyz{}, nil)
 
 	e, _ := m.NewEntity()
 
@@ -236,7 +236,7 @@ func TestUpdatingComponent(t *testing.T) {
 
 func TestRemovingComponent(t *testing.T) {
 	m := getEmptyManager()
-	m.RegisterComponent("xyz!", "xyz", Xyz{})
+	m.RegisterComponent("xyz!", "xyz", Xyz{}, nil)
 
 	e, _ := m.NewEntity()
 	err := e.RemoveComponent("foo")
@@ -260,7 +260,7 @@ func TestRemovingComponent(t *testing.T) {
 func TestDeletingEntity(t *testing.T) {
 	m := getEmptyManager()
 
-	m.RegisterComponent("xyz!", "xyz", Xyz{})
+	m.RegisterComponent("xyz!", "xyz", Xyz{}, nil)
 
 	e, _ := m.NewEntity()
 	err := e.Delete()
@@ -294,8 +294,8 @@ type Nd struct {
 func TestComponentList(t *testing.T) {
 	m := getEmptyManager()
 
-	m.RegisterComponent("xyz!", "xyz", Xyz{})
-	m.RegisterComponent("N?", "nd", Nd{})
+	m.RegisterComponent("xyz!", "xyz", Xyz{}, nil)
+	m.RegisterComponent("N?", "nd", Nd{}, nil)
 
 	e1, _ := m.NewEntity()
 	e2, _ := m.NewEntity()
@@ -347,8 +347,8 @@ func TestComponentList(t *testing.T) {
 
 func TestEntityComponents(t *testing.T) {
 	m := getEmptyManager()
-	m.RegisterComponent("xyz!", "xyz", Xyz{})
-	m.RegisterComponent("N?", "nd", Nd{})
+	m.RegisterComponent("xyz!", "xyz", Xyz{}, nil)
+	m.RegisterComponent("N?", "nd", Nd{}, nil)
 
 	e, _ := m.NewEntity()
 	c, _ := e.NewComponent("xyz!")
@@ -392,8 +392,8 @@ func TestEntityComponents(t *testing.T) {
 
 func TestQueryWhere(t *testing.T) {
 	m := getEmptyManager()
-	m.RegisterComponent("xyz!", "xyz", Xyz{})
-	m.RegisterComponent("N?", "nd", Nd{})
+	m.RegisterComponent("xyz!", "xyz", Xyz{}, nil)
+	m.RegisterComponent("N?", "nd", Nd{}, nil)
 
 	data := []struct{
 		x int
@@ -490,8 +490,8 @@ type So struct {
 
 func TestLocalComponent(t *testing.T) {
 	m := getEmptyManager()
-	m.RegisterComponent("xyz!", "xyz", Xyz{})
-	err := m.RegisterLocalComponent("So?", So{})
+	m.RegisterComponent("xyz!", "xyz", Xyz{}, nil)
+	err := m.RegisterLocalComponent("So?", So{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -612,6 +612,34 @@ func TestLocalQueries(t *testing.T) {
 
 	if cs.Next() {
 		t.Fatal("Unexpected component made it past the filter", cs.Component())
+	}
+}
+
+func TestComponentDependencies(t *testing.T) {
+	m := getEmptyManager()
+
+	m.RegisterComponent("Xyz!", "xyz", Xyz{}, nil)
+	err := m.RegisterComponent("N?", "nd", Nd{}, []string{"Xyz!"})
+	if err != nil {
+		t.Fatal("Unexpected error registering component", err)
+	}
+
+	e, _ := m.NewEntity()
+	c, err := e.NewComponent("N?")
+	if c != nil || err != ErrUnsatisfiedDependencies {
+		t.Error("Component created with unsatisfied dependencies", c, err)
+	}
+
+	c, _ = e.NewComponent("Xyz!")
+	c.Save()
+
+	c, err = e.NewComponent("N?")
+	if c == nil || err != nil {
+		t.Fatal("Component with satisfied dependencies failed", err)
+	}
+	err = c.Save()
+	if err != nil {
+		t.Error("Error saving", err)
 	}
 }
 

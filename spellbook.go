@@ -12,12 +12,14 @@ var (
 	ErrComponentNotRegistered = errors.New("No component registered with that name")
 	ErrComponentAlreadyRegistered = errors.New("Component name already registered")
 	ErrNoComponent = errors.New("Entity does not have that Component")
+	ErrUnsatisfiedDependencies = errors.New("Entity lacks one or more dependencies of the desired component")
 )
 
 type componentType struct {
 	table string
 	typ reflect.Type
 	local map[int64]interface{}
+	dependencies []string
 }
 
 type Manager struct {
@@ -48,22 +50,22 @@ type Component struct {
 	data interface{}
 }
 
-func (m *Manager) RegisterComponent(name string, table string, obj interface{}) error {
+func (m *Manager) RegisterComponent(name string, table string, obj interface{}, deps []string) error {
 	if _, ok := m.componentTypes[name]; ok {
 		return ErrComponentAlreadyRegistered
 	}
 	if _, err := m.db.Exec("select 1 from " + table + " where 1 = 0"); err != nil {
 		return err
 	}
-	m.componentTypes[name] = componentType{ table: table, typ: reflect.TypeOf(obj) }
+	m.componentTypes[name] = componentType{ table: table, typ: reflect.TypeOf(obj), dependencies: deps}
 	return nil
 }
-func (m *Manager) RegisterLocalComponent(name string, obj interface{}) error {
+func (m *Manager) RegisterLocalComponent(name string, obj interface{}, deps []string) error {
 	if _, ok := m.componentTypes[name]; ok {
 		return ErrComponentAlreadyRegistered
 	}
 	l := make(map[int64]interface{})
-	m.componentTypes[name] = componentType{ typ: reflect.TypeOf(obj), local: l }
+	m.componentTypes[name] = componentType{ typ: reflect.TypeOf(obj), local: l, dependencies: deps }
 	return nil
 }
 func (m *Manager) GetComponentNames() []string {
@@ -155,6 +157,12 @@ func (e *Entity) NewComponent(name string) (*Component, error) {
 	ctype, ok := e.manager.componentTypes[name]
 	if !ok {
 		return nil, ErrComponentNotRegistered
+	}
+	for _, dep := range ctype.dependencies {
+		_, err := e.GetComponent(dep)
+		if err != nil {
+			return nil, ErrUnsatisfiedDependencies
+		}
 	}
 	if ctype.local != nil {
 		return e.newLocalComponent(name, ctype)
