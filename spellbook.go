@@ -1,11 +1,11 @@
 package spellbook
 
 import (
-	"reflect"
 	"database/sql"
 	// todo: use only fmt.Errorf?
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 )
 
