@@ -231,3 +231,27 @@ func TestUpdatingComponent(t *testing.T) {
 		t.Error("Retrieved wrong data", xyz)
 	}
 }
+
+func TestRemovingComponent(t *testing.T) {
+	m := getEmptyManager()
+	m.RegisterComponent("xyz!", "xyz", Xyz{})
+
+	e, _ := m.NewEntity()
+	err := e.RemoveComponent("foo")
+	if err != ErrComponentNotRegistered {
+		t.Error("Removed an unregistered component")
+	}
+	err = e.RemoveComponent("xyz!")
+	if err != ErrNoComponent {
+		t.Error("Removed a registered but nonexistent component")
+	}
+
+	c, _ := e.NewComponent("xyz!")
+	c.Save()
+
+	err = e.RemoveComponent("xyz!")
+	if err != nil {
+		t.Error("Failed to remove a registered, existent component")
+	}
+}
+

@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+var ErrComponentNotRegistered = errors.New("No component registered with that name")
+
 type componentType struct {
 	table string
 	typ reflect.Type
@@ -79,6 +81,7 @@ func (m *Manager) NewEntity() (*Entity, error) {
 	}
 	return &Entity{id: id, manager: m}, nil
 }
+
 //func (m *Manager) DeleteEntity(e *Entity) error {}
 
 type Entities struct {
@@ -107,7 +110,7 @@ func (m *Manager) GetEntities() (*Entities, error) {
 func (e *Entity) NewComponent(name string) (*Component, error) {
 	ctype, ok := e.manager.componentTypes[name]
 	if !ok {
-		return nil, fmt.Errorf("Component %s doesn't exist", name)
+		return nil, ErrComponentNotRegistered
 	}
 	r := e.manager.db.QueryRow("select entity_id from " + ctype.table + " where entity_id = ?", e.id)
 	var id int64
@@ -121,7 +124,7 @@ func (e *Entity) NewComponent(name string) (*Component, error) {
 func (e *Entity) GetComponent(name string) (*Component, error) {
 	ctype, ok := e.manager.componentTypes[name]
 	if !ok {
-		return nil, fmt.Errorf("Entity doesn't have %s component", name)
+		return nil, ErrNoComponent
 	}
 	rs, err := e.manager.db.Query("select * from " + ctype.table + " where entity_id = ?", e.id)
 	defer rs.Close()
@@ -163,7 +166,26 @@ func (e *Entity) GetComponent(name string) (*Component, error) {
 	}
 	return &Component{ entity: e.id, name: name, isNew: false, manager: e.manager, data: cv.Addr().Interface() }, nil
 }
-//func (e *Entity) RemoveComponent(name string) error {}
+
+var ErrNoComponent = errors.New("Entity does not have that Component")
+func (e *Entity) RemoveComponent(name string) error {
+	ctype, ok := e.manager.componentTypes[name]
+	if !ok {
+		return ErrComponentNotRegistered
+	}
+	r, err := e.manager.db.Exec("delete from " + ctype.table + " where entity_id = ?", e.id)
+	if err != nil {
+		return err
+	}
+	n, err := r.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrNoComponent
+	}
+	return nil
+}
 
 func (c *Component) Save() error {
 	ctype := c.manager.componentTypes[c.name]
