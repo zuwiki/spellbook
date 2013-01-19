@@ -25,6 +25,12 @@ func getEmptyDB() *sql.DB {
 	return db
 }
 
+func getEmptyManager() *Manager {
+	db := getEmptyDB()
+	m, _ := NewManager(db)
+	return m
+}
+
 func TestEmptyManagerWithoutDb(t *testing.T) {
 	_, err := NewManager(nil)
 	if err == nil {
@@ -55,9 +61,7 @@ func TestEmptyManagerWithDb(t *testing.T) {
 }
 
 func TestMakingEntity(t *testing.T) {
-	db := getEmptyDB()
-
-	m, err := NewManager(db)
+	m := getEmptyManager()
 
 	e, err := m.NewEntity()
 	if err != nil {
@@ -93,9 +97,7 @@ func TestMakingEntity(t *testing.T) {
 }
 
 func TestDifferentEntityIds(t *testing.T) {
-	db := getEmptyDB()
-
-	m, _ := NewManager(db)
+	m := getEmptyManager()
 
 	e1, _ := m.NewEntity()
 	e2, _ := m.NewEntity()
@@ -111,9 +113,7 @@ type Xyz struct {
 }
 
 func TestRegisteringDbComponent(t *testing.T) {
-	db := getEmptyDB()
-
-	m, _ := NewManager(db)
+	m := getEmptyManager()
 
 	err := m.RegisterComponent("xyz!", "xyz", Xyz{})
 	if err != nil {
@@ -130,9 +130,7 @@ func TestRegisteringDbComponent(t *testing.T) {
 }
 
 func TestRegisteringMissingDbComponent(t *testing.T) {
-	db := getEmptyDB()
-
-	m, _ := NewManager(db)
+	m := getEmptyManager()
 
 	err := m.RegisterComponent("xyz!", "notXyz!", Xyz{})
 	if err == nil {
@@ -144,3 +142,4 @@ func TestRegisteringMissingDbComponent(t *testing.T) {
 		t.Error("Component with missing table shows up in GetComponentNames!")
 	}
 }
+
