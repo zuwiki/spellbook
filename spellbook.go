@@ -337,6 +337,7 @@ func (c *Component) MoveTo(dst *Entity) error {
 	if err != nil {
 		return err
 	}
+	c.entity = dstC.entity
 	return nil
 }
 

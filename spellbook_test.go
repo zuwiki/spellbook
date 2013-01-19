@@ -650,6 +650,7 @@ func TestMovingComponents(t *testing.T) {
 
 	e1, _ := m.NewEntity()
 	e2, _ := m.NewEntity()
+	id2 := e2.id
 
 	c, _ := e1.NewComponent("xyz!")
 	c.Data.(*Xyz).X = 35
@@ -658,6 +659,9 @@ func TestMovingComponents(t *testing.T) {
 	err := c.MoveTo(e2)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if c.entity != id2 {
+		t.Error("Failed to update entity of old component version", c.entity)
 	}
 
 	c, err = e1.GetComponent("xyz!")
