@@ -231,11 +231,12 @@ func (e *Entity) GetComponent(name string) (*Component, error) {
 	return e.getDbComponent(name, ctype)
 }
 
-func (e *Entity) RemoveComponent(name string) error {
-	ctype, ok := e.manager.componentTypes[name]
-	if !ok {
-		return ErrComponentNotRegistered
-	}
+func (e *Entity) removeLocalComponent(name string, ctype componentType) error {
+	delete(ctype.local, e.id)
+	return nil
+}
+
+func (e *Entity) removeDbComponent(name string, ctype componentType) error {
 	r, err := e.manager.db.Exec("delete from " + ctype.table + " where entity_id = ?", e.id)
 	if err != nil {
 		return err
@@ -248,6 +249,17 @@ func (e *Entity) RemoveComponent(name string) error {
 		return ErrNoComponent
 	}
 	return nil
+}
+
+func (e *Entity) RemoveComponent(name string) error {
+	ctype, ok := e.manager.componentTypes[name]
+	if !ok {
+		return ErrComponentNotRegistered
+	}
+	if ctype.local != nil {
+		return e.removeLocalComponent(name, ctype)
+	}
+	return e.removeDbComponent(name, ctype)
 }
 
 func (c *Component) localSave(ctype componentType, cv reflect.Value) error {

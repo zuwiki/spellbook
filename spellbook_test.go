@@ -533,6 +533,16 @@ func TestLocalComponent(t *testing.T) {
 	if len(cs) != 2 {
 		t.Error("Got", len(cs), "components instead of 2")
 	}
+
+	e.RemoveComponent("So?")
+
+	cs, err = e.Components()
+	if err != nil {
+		t.Error(err)
+	}
+	if len(cs) != 1 {
+		t.Error("Got", len(cs), "components instead of 1")
+	}
 }
 
 // todo: implement queries on local components
