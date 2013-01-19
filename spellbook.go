@@ -9,7 +9,11 @@ import (
 	"strings"
 )
 
-var ErrComponentNotRegistered = errors.New("No component registered with that name")
+var (
+	ErrComponentNotRegistered = errors.New("No component registered with that name")
+	ErrComponentAlreadyRegistered = errors.New("Component name already registered")
+	ErrNoComponent = errors.New("Entity does not have that Component")
+)
 
 type componentType struct {
 	table string
@@ -47,7 +51,7 @@ type Component struct {
 
 func (m *Manager) RegisterComponent(name string, table string, obj interface{}) error {
 	if _, ok := m.componentTypes[name]; ok {
-		return errors.New("Component name already registered")
+		return ErrComponentAlreadyRegistered
 	}
 	if _, err := m.db.Exec("select 1 from " + table + " where 1 = 0"); err != nil {
 		return err
@@ -57,7 +61,7 @@ func (m *Manager) RegisterComponent(name string, table string, obj interface{}) 
 }
 func (m *Manager) RegisterLocalComponent(name string, obj interface{}) error {
 	if _, ok := m.componentTypes[name]; ok {
-		return errors.New("Component name already registered")
+		return ErrComponentAlreadyRegistered
 	}
 	m.componentTypes[name] = componentType{ typ: reflect.TypeOf(obj), local: true }
 	return nil
@@ -173,7 +177,6 @@ func (e *Entity) GetComponent(name string) (*Component, error) {
 	return &Component{ entity: e.id, name: name, isNew: false, manager: e.manager, data: cv.Addr().Interface() }, nil
 }
 
-var ErrNoComponent = errors.New("Entity does not have that Component")
 func (e *Entity) RemoveComponent(name string) error {
 	ctype, ok := e.manager.componentTypes[name]
 	if !ok {
