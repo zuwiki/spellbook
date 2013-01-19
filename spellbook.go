@@ -9,6 +9,7 @@ import (
 type componentType struct {
 	table string
 	typ reflect.Type
+	local bool
 }
 
 type Manager struct {
@@ -37,13 +38,22 @@ type Component struct {
 }
 
 func (m *Manager) RegisterComponent(name string, table string, obj interface{}) error {
+	if _, ok := m.componentTypes[name]; ok {
+		return errors.New("Component name already registered")
+	}
 	if _, err := m.db.Exec("select 1 from " + table + " where 1 = 0"); err != nil {
 		return err
 	}
 	m.componentTypes[name] = componentType{ table: table, typ: reflect.TypeOf(obj) }
 	return nil
 }
-//func (m *Manager) RegisterLocalComponent(name string, typ reflect.Type) error {}
+func (m *Manager) RegisterLocalComponent(name string, obj interface{}) error {
+	if _, ok := m.componentTypes[name]; ok {
+		return errors.New("Component name already registered")
+	}
+	m.componentTypes[name] = componentType{ typ: reflect.TypeOf(obj), local: true }
+	return nil
+}
 func (m *Manager) GetComponentNames() []string {
 	names := []string{}
 	for name, _ := range m.componentTypes {

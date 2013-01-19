@@ -143,3 +143,20 @@ func TestRegisteringMissingDbComponent(t *testing.T) {
 	}
 }
 
+func TestRegisteringComponentWithDuplicateName(t *testing.T) {
+	m := getEmptyManager()
+
+	err := m.RegisterComponent("xyz!", "xyz", Xyz{})
+	if err != nil {
+		t.Error(err)
+	}
+	err = m.RegisterComponent("xyz!", "xyz", Xyz{})
+	if err == nil {
+		t.Fatal("Registered DB component with duplicate name")
+	}
+	err = m.RegisterLocalComponent("xyz!", Xyz{})
+	if err == nil {
+		t.Fatal("Registered local component with duplicate name")
+	}
+}
+
