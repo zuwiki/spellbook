@@ -91,3 +91,15 @@ func TestMakingEntity(t *testing.T) {
 	}
 }
 
+func TestDifferentEntityIds(t *testing.T) {
+	db := getEmptyDB()
+
+	m, _ := NewManager(db)
+
+	e1, _ := m.NewEntity()
+	e2, _ := m.NewEntity()
+	if e1.id == e2.id {
+		t.Error("got two entities with identical identities", e1, e2)
+	}
+}
+
