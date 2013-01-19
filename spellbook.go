@@ -116,7 +116,19 @@ func (m *Manager) GetEntities() (*Entities, error) {
 	return &Entities{rs, m}, nil
 }
 
-//func (e *Entity) Components() error {}
+func (e *Entity) Components() ([]*Component, error) {
+	cs := make([]*Component, 0)
+	for name, _ := range e.manager.componentTypes {
+		c, err := e.GetComponent(name)
+		if err == nil {
+			cs = append(cs, c)
+		} else if err != ErrNoComponent {
+			return nil, err
+		}
+	}
+	return cs, nil
+}
+
 func (e *Entity) NewComponent(name string) (*Component, error) {
 	ctype, ok := e.manager.componentTypes[name]
 	if !ok {
@@ -171,7 +183,7 @@ func bindComponent(name string, rs *sql.Rows, ctype componentType, manager *Mana
 func (e *Entity) GetComponent(name string) (*Component, error) {
 	ctype, ok := e.manager.componentTypes[name]
 	if !ok {
-		return nil, ErrNoComponent
+		return nil, ErrComponentNotRegistered
 	}
 	rs, err := e.manager.db.Query("select * from " + ctype.table + " where entity_id = ?", e.id)
 	defer rs.Close()
@@ -179,7 +191,7 @@ func (e *Entity) GetComponent(name string) (*Component, error) {
 		return nil, err
 	}
 	if !rs.Next() {
-		return nil, fmt.Errorf("No next row")
+		return nil, ErrNoComponent
 	}
 	return bindComponent(name, rs, ctype, e.manager)
 }

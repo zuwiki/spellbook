@@ -344,3 +344,49 @@ func TestComponentList(t *testing.T) {
 		t.Error("Extra component in iterator", ns.Err())
 	}
 }
+
+func TestEntityComponents(t *testing.T) {
+	m := getEmptyManager()
+	m.RegisterComponent("xyz!", "xyz", Xyz{})
+	m.RegisterComponent("N?", "nd", Nd{})
+
+	e, _ := m.NewEntity()
+	c, _ := e.NewComponent("xyz!")
+	c.Save()
+
+	cs, err := e.Components()
+	if err != nil {
+		t.Error(err)
+	}
+	if len(cs) != 1 {
+		t.Fatal("Got", len(cs), "components instead of 1")
+	}
+	if cs[0].name != "xyz!" {
+		t.Fatal("Got first component", cs[0].name, "instead of xyz!")
+	}
+
+	c, _ = e.NewComponent("N?")
+	c.Save()
+
+	cs, err = e.Components()
+	if err != nil {
+		t.Error(err)
+	}
+	if len(cs) != 2 {
+		t.Fatal("Got", len(cs), "components instead of 2")
+	}
+
+	e.RemoveComponent("xyz!")
+
+	cs, err = e.Components()
+	if err != nil {
+		t.Error(err)
+	}
+	if len(cs) != 1 {
+		t.Fatal("Got", len(cs), "components instead of 1")
+	}
+	if cs[0].name != "N?" {
+		t.Fatal("Got first component", cs[0].name, "instead of N?")
+	}
+}
+
