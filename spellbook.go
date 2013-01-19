@@ -131,19 +131,9 @@ func (e *Entity) NewComponent(name string) (*Component, error) {
 	c := Component{ entity: e.id, name: name, isNew: true, manager: e.manager, data: reflect.New(ctype.typ).Interface() }
 	return &c, nil
 }
-func (e *Entity) GetComponent(name string) (*Component, error) {
-	ctype, ok := e.manager.componentTypes[name]
-	if !ok {
-		return nil, ErrNoComponent
-	}
-	rs, err := e.manager.db.Query("select * from " + ctype.table + " where entity_id = ?", e.id)
-	defer rs.Close()
-	if err != nil {
-		return nil, err
-	}
-	if !rs.Next() {
-		return nil, fmt.Errorf("No next row")
-	}
+
+func bindComponent(name string, rs *sql.Rows, ctype componentType, manager *Manager) (*Component, error) {
+	var id int64
 	cols, err := rs.Columns()
 	if err != nil {
 		return nil, err
@@ -160,6 +150,7 @@ func (e *Entity) GetComponent(name string) (*Component, error) {
 	cv := reflect.New(ctype.typ).Elem()
 	for i, field := range cols {
 		if field == "entity_id" {
+			id = ifaces[i].(int64)
 			continue
 		}
 		f := cv.FieldByName(field)
@@ -174,7 +165,23 @@ func (e *Entity) GetComponent(name string) (*Component, error) {
 			f.Set(iv)
 		}
 	}
-	return &Component{ entity: e.id, name: name, isNew: false, manager: e.manager, data: cv.Addr().Interface() }, nil
+	return &Component{ entity: id, name: name, isNew: false, manager: manager, data: cv.Addr().Interface() }, nil
+}
+
+func (e *Entity) GetComponent(name string) (*Component, error) {
+	ctype, ok := e.manager.componentTypes[name]
+	if !ok {
+		return nil, ErrNoComponent
+	}
+	rs, err := e.manager.db.Query("select * from " + ctype.table + " where entity_id = ?", e.id)
+	defer rs.Close()
+	if err != nil {
+		return nil, err
+	}
+	if !rs.Next() {
+		return nil, fmt.Errorf("No next row")
+	}
+	return bindComponent(name, rs, ctype, e.manager)
 }
 
 func (e *Entity) RemoveComponent(name string) error {
@@ -235,11 +242,48 @@ func (c *Component) Save() error {
 	return nil
 }
 
-//type Components struct {}
+type Components struct {
+	rows *sql.Rows
+	component *Component
+	name string
+	ctype componentType
+	manager *Manager
+	err error
+}
 
-//func (cs *Components) Close() error {}
-//func (cs *Components) Component() Component {}
-//func (cs *Components) Next() bool {}
-//func (cs *Components) Err() error {}
+func (cs *Components) Close() error {
+	return cs.rows.Close()
+}
+func (cs *Components) Component() *Component {
+	return cs.component
+}
+func (cs *Components) Next() bool {
+	if !cs.rows.Next() {
+		return false
+	}
+	cs.component, cs.err = bindComponent(cs.name, cs.rows, cs.ctype, cs.manager)
+	return cs.err == nil
+}
+func (cs *Components) Err() error {
+	if cs.err != nil {
+		return cs.err
+	}
+	return cs.rows.Err()
+}
 
-//func (m *Manager) GetComponents(name string) (Components, error) {}
+func (m *Manager) GetComponents(name string) (*Components, error) {
+	ctype, ok := m.componentTypes[name]
+	if !ok {
+		return nil, ErrComponentNotRegistered
+	}
+	rs, err := m.db.Query("select * from " + ctype.table)
+	if err != nil {
+		return nil, err
+	}
+	c := new(Components)
+	c.rows = rs
+	c.name = name
+	c.ctype = ctype
+	c.manager = m
+	return c, nil
+}

@@ -16,6 +16,7 @@ func getEmptyDB() *sql.DB {
 	sqls := []string{
 		"create table entities (id integer not null primary key)",
 		"create table xyz (entity_id integer not null primary key references entities(id) on delete cascade, X integer not null, Y integer not null, Z integer not null)",
+		"create table nd (entity_id integer not null primary key references entities(id) on delete cascade, N text not null)",
 	}
 	for _, sql := range sqls {
 		_, err = db.Exec(sql)
@@ -286,3 +287,60 @@ func TestDeletingEntity(t *testing.T) {
 	// todo: test Components list to make sure component was deleted
 }
 
+type Nd struct {
+	N string
+}
+
+func TestComponentList(t *testing.T) {
+	m := getEmptyManager()
+
+	m.RegisterComponent("xyz!", "xyz", Xyz{})
+	m.RegisterComponent("N?", "nd", Nd{})
+
+	e1, _ := m.NewEntity()
+	e2, _ := m.NewEntity()
+
+	c, _ := e1.NewComponent("xyz!")
+	c.Save()
+
+	c, _ = e1.NewComponent("N?")
+	n := c.data.(*Nd)
+	n.N = "e1"
+	c.Save()
+
+	c, _ = e2.NewComponent("N?")
+	n = c.data.(*Nd)
+	n.N = "e2"
+	c.Save()
+
+	ns, err := m.GetComponents("N?")
+	if err != nil {
+		t.Fatal("Error getting iterator:", err)
+	}
+	if !ns.Next() || ns.Err() != nil || ns.Component() == nil {
+		t.Fatal("0 values in components", ns.Err())
+	}
+	n1Seen := false
+	n2Seen := false
+	n = ns.Component().data.(*Nd)
+	if n.N == "e1" {
+		n1Seen = true
+	} else if n.N == "e2" {
+		n2Seen = true
+	}
+	if !ns.Next() || ns.Err() != nil || ns.Component() == nil {
+		t.Fatal("only 1 values in components", ns.Err())
+	}
+	n = ns.Component().data.(*Nd)
+	if n.N == "e1" {
+		n1Seen = true
+	} else if n.N == "e2" {
+		n2Seen = true
+	}
+	if !n1Seen || !n2Seen {
+		t.Error("Either n1 or n2 missing")
+	}
+	if ns.Next() || ns.Err() != nil {
+		t.Error("Extra component in iterator", ns.Err())
+	}
+}
