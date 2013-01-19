@@ -322,6 +322,28 @@ func (c *Component) Save() error {
 	return c.dbSave(ctype, cv)
 }
 
+func (c *Component) MoveTo(dst *Entity) error {
+	src := &Entity{ c.entity, c.manager }
+	err := src.RemoveComponent(c.name)
+	if err != nil {
+		return err
+	}
+	dstC, err := dst.NewComponent(c.name)
+	if err != nil {
+		return err
+	}
+	dstC.Data = c.Data
+	err = dstC.Save()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Component) Entity() *Entity {
+	return &Entity{ c.entity, c.manager }
+}
+
 type Components interface {
 	Close() error
 	Component() *Component

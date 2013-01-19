@@ -643,3 +643,34 @@ func TestComponentDependencies(t *testing.T) {
 	}
 }
 
+func TestMovingComponents(t *testing.T) {
+	m := getEmptyManager()
+
+	m.RegisterComponent("xyz!", "xyz", Xyz{}, nil)
+
+	e1, _ := m.NewEntity()
+	e2, _ := m.NewEntity()
+
+	c, _ := e1.NewComponent("xyz!")
+	c.Data.(*Xyz).X = 35
+	c.Save()
+
+	err := c.MoveTo(e2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c, err = e1.GetComponent("xyz!")
+	if err != ErrNoComponent {
+		t.Error("Component not missing after moving", c, err)
+	}
+
+	c, err = e2.GetComponent("xyz!")
+	if err != nil {
+		t.Fatal("Error getting component from destintion after moving", err)
+	}
+	if c.Data.(*Xyz).X != 35 {
+		t.Error("Wrong data for moved component!")
+	}
+}
+
