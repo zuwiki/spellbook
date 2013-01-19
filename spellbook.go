@@ -283,18 +283,74 @@ func (cs *Components) Err() error {
 }
 
 func (m *Manager) GetComponents(name string) (*Components, error) {
+	return m.QueryComponent(name).Run()
+}
+
+type Query struct {
+	name string
+	ctype componentType
+	manager *Manager
+	wheres []string
+	args []interface{}
+	err error
+}
+
+func (m *Manager) QueryComponent(name string) *Query {
 	ctype, ok := m.componentTypes[name]
 	if !ok {
-		return nil, ErrComponentNotRegistered
+		return &Query{ err: ErrComponentNotRegistered }
 	}
-	rs, err := m.db.Query("select * from " + ctype.table)
+	return &Query{ name: name, ctype: ctype, manager: m, wheres: make([]string, 0), args: make([]interface{}, 0) }
+}
+
+func (q *Query) toString() string {
+	s := "select * from " + q.ctype.table
+	if len(q.wheres) > 0 {
+		s += " where " + strings.Join(q.wheres, " and ")
+	}
+	return s
+}
+
+func (q *Query) Run() (*Components, error) {
+	if q.err != nil {
+		return nil, q.err
+	}
+	rs, err := q.manager.db.Query(q.toString(), q.args...)
 	if err != nil {
 		return nil, err
 	}
 	c := new(Components)
 	c.rows = rs
-	c.name = name
-	c.ctype = ctype
-	c.manager = m
+	c.name = q.name
+	c.ctype = q.ctype
+	c.manager = q.manager
 	return c, nil
 }
+
+func (q *Query) Where(field string, val interface{}, op string) {
+	// todo: check that field name exists
+	s := fmt.Sprintf("%s %s ?", field, op)
+	q.wheres = append(q.wheres, s)
+	q.args = append(q.args, val)
+}
+
+func (q *Query) Eq(field string, val interface{}) {
+	q.Where(field, val, "=")
+}
+
+func (q *Query) Gt(field string, val interface{}) {
+	q.Where(field, val, ">")
+}
+
+func (q *Query) Gte(field string, val interface{}) {
+	q.Where(field, val, ">=")
+}
+
+func (q *Query) Lt(field string, val interface{}) {
+	q.Where(field, val, "<")
+}
+
+func (q *Query) Lte(field string, val interface{}) {
+	q.Where(field, val, "<=")
+}
+

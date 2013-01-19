@@ -390,3 +390,96 @@ func TestEntityComponents(t *testing.T) {
 	}
 }
 
+func TestQueryWhere(t *testing.T) {
+	m := getEmptyManager()
+	m.RegisterComponent("xyz!", "xyz", Xyz{})
+	m.RegisterComponent("N?", "nd", Nd{})
+
+	data := []struct{
+		x int
+		y int
+		z int
+	}{
+		{1,2,3},
+		{4,5,7},
+		{-1,-3,6},
+		{3,5,9},
+		{2,5,9},
+	}
+	for i := range data {
+		e, _ := m.NewEntity()
+		c, _ := e.NewComponent("xyz!")
+		xyz := c.data.(*Xyz)
+		xyz.X = data[i].x
+		xyz.Y = data[i].y
+		xyz.Z = data[i].z
+		c.Save()
+		// for entities with odd xyz.X, set nd.N to wowzers (reversed if xyz.X is negative)
+		if xyz.X % 2 == 1 {
+			c, _ := e.NewComponent("N?")
+			nd := c.data.(*Nd)
+			if xyz.X > -1 {
+				nd.N = "wowzers!"
+			} else {
+				nd.N = "!srezwow"
+			}
+			c.Save()
+		}
+	}
+
+	q := m.QueryComponent("xyz!")
+	q.Eq("Y", 5)
+	cs, err := q.Run()
+	if err != nil {
+		t.Fatal(err, q.toString())
+	}
+
+	i := 0
+	for cs.Next() {
+		i++
+		xyz := cs.Component().data.(*Xyz)
+		if xyz.Z < 7 {
+			t.Error("Data doesn't match eyeball analysis: something has Z < 7")
+		}
+	}
+	cs.Close()
+	if i != 3 {
+		t.Error("Number of columns doesn't match eyeball count: got", i, "rows instead of 3")
+	}
+
+	q = m.QueryComponent("xyz!")
+	q.Gt("Z", 6)
+	cs, err = q.Run()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	i = 0
+	for cs.Next() {
+		i++
+		xyz := cs.Component().data.(*Xyz)
+		if xyz.Y != 5 {
+			t.Error("Data doesn't match eyeball analysis: something has Y != 5")
+		}
+	}
+	cs.Close()
+	if i != 3 {
+		t.Error("Number of columns doesn't match eyeball count: got", i, "rows instead of 3")
+	}
+
+	q = m.QueryComponent("N?")
+	q.Eq("N", "wowzers!")
+	cs, err = q.Run()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	i = 0
+	for cs.Next() {
+		i++
+	}
+	if i != 2 {
+		t.Error("Number of columns doesn't match eyeball count: got", i, "rows instead of 2")
+	}
+}
+
