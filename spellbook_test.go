@@ -428,10 +428,10 @@ func TestQueryWhere(t *testing.T) {
 	}
 
 	q := m.QueryComponent("xyz!")
-	q.Eq("Y", 5)
+	Eq(q, "Y", 5)
 	cs, err := q.Run()
 	if err != nil {
-		t.Fatal(err, q.toString())
+		t.Fatal(err, q.(*dbQuery).toString())
 	}
 
 	i := 0
@@ -448,7 +448,7 @@ func TestQueryWhere(t *testing.T) {
 	}
 
 	q = m.QueryComponent("xyz!")
-	q.Gt("Z", 6)
+	Gt(q, "Z", 6)
 	cs, err = q.Run()
 	if err != nil {
 		t.Fatal(err)
@@ -468,7 +468,7 @@ func TestQueryWhere(t *testing.T) {
 	}
 
 	q = m.QueryComponent("N?")
-	q.Eq("N", "wowzers!")
+	Eq(q, "N", "wowzers!")
 	cs, err = q.Run()
 	if err != nil {
 		t.Fatal(err)
@@ -545,5 +545,73 @@ func TestLocalComponent(t *testing.T) {
 	}
 }
 
-// todo: implement queries on local components
+func TestLocalQueries(t *testing.T) {
+	m := getEmptyManager()
+	m.RegisterComponent("xyz!", "xyz", Xyz{})
+	m.RegisterLocalComponent("So?", So{})
+
+	e, _ := m.NewEntity()
+	c, _ := e.NewComponent("So?")
+	so := c.data.(*So)
+	so.What = "ccc"
+	so.Haha = 5
+	c.Save()
+
+	e, _ = m.NewEntity()
+	c, _ = e.NewComponent("So?")
+	so = c.data.(*So)
+	so.What = "aaa"
+	so.Haha = -5
+	c.Save()
+
+	q := m.QueryComponent("So?")
+	Gt(q, "Haha", 0)
+
+	cs, err := q.Run()
+	if cs == nil || err != nil {
+		t.Fatal("Running the query failed:", err)
+	}
+
+	if !cs.Next() || cs.Component() == nil {
+		t.Fatal("Got 0 elements, but expected 1", cs.Err())
+	}
+
+	c = cs.Component()
+	if cs.Err() != nil {
+		t.Fatal("Unexpected error getting component", cs.Err())
+	}
+	so = c.data.(*So)
+	if so.Haha != 5 {
+		t.Error("Unexpected So? component", so)
+	}
+
+	if cs.Next() {
+		t.Fatal("Unexpected component made it past the filter", cs.Component())
+	}
+
+	q = m.QueryComponent("So?")
+	Lt(q, "What", "bbb")
+
+	cs, err = q.Run()
+	if cs == nil || err != nil {
+		t.Fatal("Running the query failed:", err)
+	}
+
+	if !cs.Next() || cs.Component() == nil {
+		t.Fatal("Got 0 elements, but expected 1", cs.Err())
+	}
+
+	c = cs.Component()
+	if cs.Err() != nil {
+		t.Fatal("Unexpected error getting component", cs.Err())
+	}
+	so = c.data.(*So)
+	if so.What != "aaa" {
+		t.Error("Wrong So? component", so)
+	}
+
+	if cs.Next() {
+		t.Fatal("Unexpected component made it past the filter", cs.Component())
+	}
+}
 

@@ -314,7 +314,52 @@ func (c *Component) Save() error {
 	return c.dbSave(ctype, cv)
 }
 
-type Components struct {
+type Components interface {
+	Close() error
+	Component() *Component
+	Next() bool
+	Err() error
+}
+
+type sliceComponents struct {
+	slice []*Component
+	index int
+	closed bool
+	err error
+}
+
+func (cs *sliceComponents) Close() error {
+	cs.closed = true
+	cs.slice = nil
+	return cs.err
+}
+
+func (cs *sliceComponents) Component() *Component {
+	if cs.closed {
+		cs.err = errors.New("Iterator already closed")
+		return nil
+	}
+	if cs.index < 0 {
+		cs.err = errors.New("Next() not called on iterator")
+		return nil
+	}
+	return cs.slice[cs.index]
+}
+
+func (cs *sliceComponents) Next() bool {
+	if cs.closed {
+		cs.err = errors.New("Iterator already closed")
+		return false
+	}
+	cs.index += 1
+	return cs.index < len(cs.slice)
+}
+
+func (cs *sliceComponents) Err() error {
+	return cs.err
+}
+
+type dbComponents struct {
 	rows *sql.Rows
 	component *Component
 	name string
@@ -323,31 +368,43 @@ type Components struct {
 	err error
 }
 
-func (cs *Components) Close() error {
+func (cs *dbComponents) Close() error {
 	return cs.rows.Close()
 }
-func (cs *Components) Component() *Component {
+func (cs *dbComponents) Component() *Component {
 	return cs.component
 }
-func (cs *Components) Next() bool {
+func (cs *dbComponents) Next() bool {
 	if !cs.rows.Next() {
 		return false
 	}
 	cs.component, cs.err = bindComponent(cs.name, cs.rows, cs.ctype, cs.manager)
 	return cs.err == nil
 }
-func (cs *Components) Err() error {
+func (cs *dbComponents) Err() error {
 	if cs.err != nil {
 		return cs.err
 	}
 	return cs.rows.Err()
 }
 
-func (m *Manager) GetComponents(name string) (*Components, error) {
+func (m *Manager) GetComponents(name string) (Components, error) {
 	return m.QueryComponent(name).Run()
 }
 
-type Query struct {
+type Query interface {
+	Run() (Components, error)
+	Where(string, interface{}, string)
+}
+
+type localQuery struct {
+	name string
+	ctype componentType
+	manager *Manager
+	wheres []func (reflect.Value) bool
+}
+
+type dbQuery struct {
 	name string
 	ctype componentType
 	manager *Manager
@@ -356,15 +413,20 @@ type Query struct {
 	err error
 }
 
-func (m *Manager) QueryComponent(name string) *Query {
+func (m *Manager) QueryComponent(name string) Query {
 	ctype, ok := m.componentTypes[name]
 	if !ok {
-		return &Query{ err: ErrComponentNotRegistered }
+		return &dbQuery{ err: ErrComponentNotRegistered }
 	}
-	return &Query{ name: name, ctype: ctype, manager: m, wheres: make([]string, 0), args: make([]interface{}, 0) }
+	if ctype.local != nil {
+		return &localQuery{ name: name, ctype: ctype, manager: m, wheres: make([]func (reflect.Value) bool, 0) }
+	} else {
+		return &dbQuery{ name: name, ctype: ctype, manager: m, wheres: make([]string, 0), args: make([]interface{}, 0) }
+	}
+	return nil
 }
 
-func (q *Query) toString() string {
+func (q *dbQuery) toString() string {
 	s := "select * from " + q.ctype.table
 	if len(q.wheres) > 0 {
 		s += " where " + strings.Join(q.wheres, " and ")
@@ -372,7 +434,77 @@ func (q *Query) toString() string {
 	return s
 }
 
-func (q *Query) Run() (*Components, error) {
+func (q *localQuery) Run() (Components, error) {
+	cs := make([]*Component, 0)
+	for id, data := range q.ctype.local {
+		excluded := false
+		c := Component{ entity: id, name: q.name, isNew: false, manager: q.manager, data: data }
+		for _, pred := range q.wheres {
+			cv := reflect.ValueOf(c.data)
+			if !pred(cv) {
+				excluded = true
+				break
+			}
+		}
+		if !excluded {
+			cs = append(cs, &c)
+		}
+	}
+
+	return &sliceComponents{ cs, -1, false, nil }, nil
+}
+
+func (q *localQuery) Where(field string, other interface{}, op string) {
+	pred := func(val reflect.Value) bool {
+		f := val.Elem().FieldByName(field)
+		switch op {
+		case "=":
+			return f == reflect.ValueOf(other)
+		case "!=":
+			return f != reflect.ValueOf(other)
+		case "<":
+			switch f.Kind() {
+			case reflect.String:
+				return f.String() < other.(string)
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				return f.Int() < reflect.ValueOf(other).Int()
+			case reflect.Float32, reflect.Float64:
+				return f.Float() < reflect.ValueOf(other).Float()
+			}
+		case ">":
+			switch f.Kind() {
+			case reflect.String:
+				return f.String() > other.(string)
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				return f.Int() > reflect.ValueOf(other).Int()
+			case reflect.Float32, reflect.Float64:
+				return f.Float() > reflect.ValueOf(other).Float()
+			}
+		case "<=":
+			switch f.Kind() {
+			case reflect.String:
+				return f.String() <= other.(string)
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				return f.Int() <= reflect.ValueOf(other).Int()
+			case reflect.Float32, reflect.Float64:
+				return f.Float() <= reflect.ValueOf(other).Float()
+			}
+		case ">=":
+			switch f.Kind() {
+			case reflect.String:
+				return f.String() >= other.(string)
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				return f.Int() >= reflect.ValueOf(other).Int()
+			case reflect.Float32, reflect.Float64:
+				return f.Float() >= reflect.ValueOf(other).Float()
+			}
+		}
+		return false
+	}
+	q.wheres = append(q.wheres, pred)
+}
+
+func (q *dbQuery) Run() (Components, error) {
 	if q.err != nil {
 		return nil, q.err
 	}
@@ -380,7 +512,7 @@ func (q *Query) Run() (*Components, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := new(Components)
+	c := new(dbComponents)
 	c.rows = rs
 	c.name = q.name
 	c.ctype = q.ctype
@@ -388,34 +520,34 @@ func (q *Query) Run() (*Components, error) {
 	return c, nil
 }
 
-func (q *Query) Where(field string, val interface{}, op string) {
+func (q *dbQuery) Where(field string, val interface{}, op string) {
 	// todo: check that field name exists
 	s := fmt.Sprintf("%s %s ?", field, op)
 	q.wheres = append(q.wheres, s)
 	q.args = append(q.args, val)
 }
 
-func (q *Query) Eq(field string, val interface{}) {
+func Eq(q Query, field string, val interface{}) {
 	q.Where(field, val, "=")
 }
 
-func (q *Query) Gt(field string, val interface{}) {
+func Gt(q Query, field string, val interface{}) {
 	q.Where(field, val, ">")
 }
 
-func (q *Query) Gte(field string, val interface{}) {
+func Gte(q Query, field string, val interface{}) {
 	q.Where(field, val, ">=")
 }
 
-func (q *Query) Lt(field string, val interface{}) {
+func Lt(q Query, field string, val interface{}) {
 	q.Where(field, val, "<")
 }
 
-func (q *Query) Lte(field string, val interface{}) {
+func Lte(q Query, field string, val interface{}) {
 	q.Where(field, val, "<=")
 }
 
-func (q *Query) Neq(field string, val interface{}) {
+func Neq(q Query, field string, val interface{}) {
 	q.Where(field, val, "!=")
 }
 
