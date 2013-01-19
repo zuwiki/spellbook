@@ -354,3 +354,7 @@ func (q *Query) Lte(field string, val interface{}) {
 	q.Where(field, val, "<=")
 }
 
+func (q *Query) Neq(field string, val interface{}) {
+	q.Where(field, val, "!=")
+}
+
