@@ -1,1 +1,13 @@
-spellbook rules
+Spellbook
+=========
+
+Spellbook is an API for persistent storage of component-entity data models.
+
+Currently, it only works for SQL databases. Eventually, we might support alternate backends.
+Maybe we should even someday implement our own custom storage format optimized specifically for component-entity data, but not yet.
+
+Component-entity is a data model where the objects of interest are entities. An entity is a collection of components. A component is a blob of data.
+
+This architecture has been used in some prominent video games (such as Thief, Dungeon Siege, and Tony Hawk's Pro Skater 3).
+
+And it seemed pretty nice to us when we played around with it. But using a database to store component-entity data is a bit of a pain, since the sensible approaches don't work with ORMs easily.
