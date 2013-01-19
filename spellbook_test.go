@@ -13,7 +13,7 @@ func getEmptyDB() *sql.DB {
 	os.Remove(dbName)
 	db, err := sql.Open("sqlite3", dbName)
 	sqls := []string{
-		"create table entities (id integer not null primary key, label text)",
+		"create table entities (id integer not null primary key)",
 	}
 	for _, sql := range sqls {
 		_, err = db.Exec(sql)
@@ -60,20 +60,26 @@ func TestMakingEntity(t *testing.T) {
 
 	e, err := m.NewEntity()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if e == nil {
 		t.Error("nil Entity")
 	}
+	id := e.id
+	e = nil
 
 	es, err := m.GetEntities()
 	if err != nil {
 		t.Error(err)
 	}
-	if !es.Next() || es.Entity() == nil {
-		t.Fatal("no entity")
+	if !es.Next() {
+		t.Fatal("no entity", es.Err())
 	}
-	if es.Entity().id != e.id {
+	e, err = es.Entity()
+	if err != nil || e == nil {
+		t.Fatal("nil entity", err)
+	}
+	if id != e.id {
 		t.Error("got wrong entity in a space of 1 entities")
 	}
 	if es.Next() {

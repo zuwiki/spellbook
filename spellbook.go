@@ -3,18 +3,24 @@ package spellbook
 import (
 //	"reflect"
 	"database/sql"
+	"errors"
 )
 
 type Manager struct {
+	db *sql.DB
 }
 
 func NewManager(db *sql.DB) (*Manager, error) {
 	m := new(Manager)
+	if db == nil {
+		return nil, errors.New("need a database")
+	}
+	m.db = db
 	return m, nil
 }
 
 type Entity struct {
-	id uint64
+	id int64
 	manager *Manager
 }
 
@@ -30,29 +36,38 @@ func (m *Manager) GetComponentNames() []string {
 }
 
 func (m *Manager) NewEntity() (*Entity, error) {
-	return &Entity{}, nil
+	r, err := m.db.Exec("insert into entities values (null)")
+	if err != nil {
+		return nil, err
+	}
+	id, err := r.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	return &Entity{id: id, manager: m}, nil
 }
 //func (m *Manager) DeleteEntity(e *Entity) error {}
 
 type Entities struct {
-	err error
+	*sql.Rows
+	manager *Manager
 }
 
-func (es *Entities) Close() error {
-	return nil
-}
-func (es *Entities) Entity() *Entity {
-	return nil
-}
-func (es *Entities) Next() bool {
-	return false
-}
-func (es *Entities) Err() error {
-	return es.err
+func (es *Entities) Entity() (*Entity, error)  {
+	e := &Entity{manager: es.manager}
+	err := es.Scan(&e.id)
+	if err != nil {
+		return nil, err
+	}
+	return e, nil
 }
 
-func (m *Manager) GetEntities() (Entities, error) {
-	return Entities{}, nil
+func (m *Manager) GetEntities() (*Entities, error) {
+	rs, err := m.db.Query("select id from entities")
+	if err != nil {
+		return nil, err
+	}
+	return &Entities{rs, m}, nil
 }
 
 //func (e *Entity) Components() error {}
