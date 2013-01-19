@@ -14,6 +14,7 @@ func getEmptyDB() *sql.DB {
 	db, err := sql.Open("sqlite3", dbName)
 	sqls := []string{
 		"create table entities (id integer not null primary key)",
+		"create table xyz (id integer not null primary key, x integer not null, y integer not null, z integer not null)",
 	}
 	for _, sql := range sqls {
 		_, err = db.Exec(sql)
@@ -103,3 +104,27 @@ func TestDifferentEntityIds(t *testing.T) {
 	}
 }
 
+type Xyz struct {
+	x int
+	y int
+	z int
+}
+
+func TestRegisteringDbComponent(t *testing.T) {
+	db := getEmptyDB()
+
+	m, _ := NewManager(db)
+
+	err := m.RegisterComponent("xyz!", "xyz", Xyz{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cns := m.GetComponentNames()
+	if len(cns) != 1 {
+		t.Fatal("Invalid component name count", len(cns))
+	}
+	if cns[0] != "xyz!" {
+		t.Error("Expected xyz! for component name", cns[0])
+	}
+}

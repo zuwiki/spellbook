@@ -1,13 +1,19 @@
 package spellbook
 
 import (
-//	"reflect"
+	"reflect"
 	"database/sql"
 	"errors"
 )
 
+type componentType struct {
+	table string
+	typ reflect.Type
+}
+
 type Manager struct {
 	db *sql.DB
+	componentTypes map[string] componentType
 }
 
 func NewManager(db *sql.DB) (*Manager, error) {
@@ -16,6 +22,7 @@ func NewManager(db *sql.DB) (*Manager, error) {
 		return nil, errors.New("need a database")
 	}
 	m.db = db
+	m.componentTypes = make(map[string] componentType)
 	return m, nil
 }
 
@@ -29,10 +36,17 @@ type Component struct {
 	manager *Manager
 }
 
-//func (m *Manager) RegisterComponent(name string, table string, typ reflect.Type) error {}
+func (m *Manager) RegisterComponent(name string, table string, obj interface{}) error {
+	m.componentTypes[name] = componentType{ table: table, typ: reflect.TypeOf(obj) }
+	return nil
+}
 //func (m *Manager) RegisterLocalComponent(name string, typ reflect.Type) error {}
 func (m *Manager) GetComponentNames() []string {
-	return []string{}
+	names := []string{}
+	for name, _ := range m.componentTypes {
+		names = append(names, name)
+	}
+	return names
 }
 
 func (m *Manager) NewEntity() (*Entity, error) {
